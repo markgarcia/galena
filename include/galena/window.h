@@ -1,6 +1,6 @@
 #pragma once
 
-#include "window_event.h"
+#include "galena/window/window_event.h"
 
 #include <functional>
 #include <memory>

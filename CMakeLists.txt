@@ -12,10 +12,10 @@ include_directories(include)
 
 set(SRC_LIST
     include/galena/application.h
-    include/galena/window/window.h
+    include/galena/window.h
     include/galena/window/window_event.h
 
-    src/window/window.cpp)
+    src/window.cpp)
 
 if(WIN32)
     add_definitions(-DUNICODE)

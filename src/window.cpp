@@ -1,4 +1,4 @@
-#include "galena/window/window.h"
+#include "galena/window.h"
 
 #include "galena/window/win32/window_impl.h"
 
