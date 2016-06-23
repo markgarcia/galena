@@ -14,20 +14,14 @@
 namespace galena {
 
 
-void run() {
-    BOOL ret;
-    MSG msg;
+void application::process_events() {
+    MSG msg = {0};
+    while(PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
 
-    while((ret = GetMessage(&msg, NULL, 0, 0)) != 0)
-    {
-        if(ret == -1)
-        {
-            return;
-        }
-        else
-        {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
+        if(msg.message == WM_QUIT) {
+            m_is_open = false;
         }
     }
 }
