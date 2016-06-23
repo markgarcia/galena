@@ -12,9 +12,12 @@ include_directories(include)
 
 set(SRC_LIST
     include/galena/application.h
+
+    include/galena/renderer.h
+    src/renderer.cpp
+
     include/galena/window.h
     include/galena/window/window_event.h
-
     src/window.cpp)
 
 if(WIN32)
@@ -22,15 +25,24 @@ if(WIN32)
 
     set(SRC_LIST
         ${SRC_LIST}
+
+        src/application.cpp
+
+        include/galena/renderer/dx11/dx11_renderer.h
+        src/renderer/dx11/dx11_renderer.cpp
+
         include/galena/window/win32/event_identifier.h
         include/galena/window/win32/types.h
         include/galena/window/win32/window_event.h
         include/galena/window/win32/window_impl.h
-        src/application.cpp
         src/window/win32/window_impl.cpp
         src/window/win32/event_identifier.cpp)
 endif()
 
-add_library(${PROJECT_NAME} ${SRC_LIST})
+add_library(galena ${SRC_LIST})
+
+if(WIN32)
+    target_link_libraries(galena D3D11)
+endif()
 
 add_subdirectory(tools/cpp-shader-compiler)
