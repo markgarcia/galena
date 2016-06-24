@@ -1,12 +1,14 @@
 #pragma once
 
+#include "galena/window_render_surface.h"
 #include "galena/renderer.h"
-#include "galena/renderer/dx11/impl/com_ptr.h"
+#include <wrl/client.h>
+
+using Microsoft::WRL::ComPtr;
 
 
 class ID3D11Device;
 class ID3D11DeviceContext;
-class IDXGISwapChain;
 
 
 namespace galena {
@@ -17,12 +19,13 @@ public:
     dx11_renderer();
     ~dx11_renderer();
 
-    void render_on(const window& window) override;
+    ComPtr<ID3D11Device> get_device();
+
+    void render_on(window_render_surface& surface) override;
 
 private:
-    impl::com_ptr<ID3D11Device> m_device;
-    impl::com_ptr<ID3D11DeviceContext> m_immediate_context;
-    impl::com_ptr<IDXGISwapChain> m_swap_chain;
+    ComPtr<ID3D11Device> m_device;
+    ComPtr<ID3D11DeviceContext> m_immediate_context;
 };
 
 

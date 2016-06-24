@@ -14,7 +14,9 @@ set(SRC_LIST
     include/galena/application.h
 
     include/galena/renderer.h
+    include/galena/window_render_surface.h
     src/renderer.cpp
+    src/window_render_surface.cpp
 
     include/galena/window.h
     include/galena/window/window_event.h
@@ -29,8 +31,9 @@ if(WIN32)
         src/application.cpp
 
         include/galena/renderer/dx11/dx11_renderer.h
-        include/galena/renderer/dx11/impl/com_ptr.h
+        include/galena/renderer/dx11/dx11_window_render_surface.h
         src/renderer/dx11/dx11_renderer.cpp
+        src/renderer/dx11/dx11_window_render_surface.cpp
 
         include/galena/window/win32/event_identifier.h
         include/galena/window/win32/types.h

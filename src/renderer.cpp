@@ -6,8 +6,9 @@
 namespace galena {
 
 
-renderer::~renderer() {}
+renderer::renderer(renderer_type type) : type(type) {}
 
+renderer::~renderer() = default;
 
 std::unique_ptr<renderer> renderer::create(renderer_type type) {
     switch(type) {
