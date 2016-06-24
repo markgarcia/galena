@@ -10,6 +10,20 @@ namespace galena {
 class window_render_surface;
 
 
+namespace impl {
+
+
+class renderer_impl {
+public:
+    virtual ~renderer_impl() = 0;
+
+    virtual void render_on(window_render_surface& surface) = 0;
+};
+
+
+}
+
+
 class renderer {
 public:
     enum class renderer_type {
@@ -19,11 +33,13 @@ public:
     const renderer_type type;
 
     renderer(renderer_type type);
-    virtual ~renderer() = 0;
 
-    virtual void render_on(window_render_surface& surface) = 0;
+    void render_on(window_render_surface& surface);
 
-    static std::unique_ptr<renderer> create(renderer_type type);
+    impl::renderer_impl& get_impl() { return *m_impl; }
+
+private:
+    std::unique_ptr<impl::renderer_impl> m_impl;
 };
 
 

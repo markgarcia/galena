@@ -7,8 +7,7 @@
 namespace galena {
 
 
-dx11_renderer::dx11_renderer()
-    : renderer(renderer_type::dx11) {
+dx11_renderer::dx11_renderer() {
     if(FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0,
                                 D3D11_SDK_VERSION, &m_device, nullptr, &m_immediate_context)))
     {

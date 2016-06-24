@@ -6,18 +6,23 @@
 namespace galena {
 
 
-renderer::renderer(renderer_type type) : type(type) {}
+impl::renderer_impl::~renderer_impl() = default;
 
-renderer::~renderer() = default;
 
-std::unique_ptr<renderer> renderer::create(renderer_type type) {
+renderer::renderer(renderer_type type)
+    : type(type) {
     switch(type) {
         case renderer_type::dx11:
-            return std::make_unique<dx11_renderer>();
+            m_impl = std::make_unique<dx11_renderer>();
+            break;
 
         default:
-            return nullptr;
+            throw std::invalid_argument("Invalid renderer type.");
     }
+}
+
+void renderer::render_on(window_render_surface& surface) {
+    m_impl->render_on(surface);
 }
 
 

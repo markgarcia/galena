@@ -14,7 +14,7 @@ class ID3D11DeviceContext;
 namespace galena {
 
 
-class dx11_renderer : public renderer {
+class dx11_renderer : public impl::renderer_impl {
 public:
     dx11_renderer();
     ~dx11_renderer();
