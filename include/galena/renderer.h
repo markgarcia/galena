@@ -1,5 +1,6 @@
 #pragma once
 
+#include "galena/window.h"
 #include <memory>
 
 
@@ -13,6 +14,8 @@ public:
     };
 
     virtual ~renderer() = 0;
+
+    virtual void render_on(const window& window) = 0;
 
     static std::unique_ptr<renderer> create(renderer_type type);
 };
