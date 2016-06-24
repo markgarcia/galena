@@ -46,4 +46,5 @@ if(WIN32)
     target_link_libraries(galena D3D11)
 endif()
 
+add_subdirectory(tests)
 add_subdirectory(tools/cpp-shader-compiler)
