@@ -1,7 +1,5 @@
 #pragma once
 
-#include "galena/window/window_event.h"
-
 
 namespace galena {
 

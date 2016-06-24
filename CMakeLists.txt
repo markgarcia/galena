@@ -29,6 +29,7 @@ if(WIN32)
         src/application.cpp
 
         include/galena/renderer/dx11/dx11_renderer.h
+        include/galena/renderer/dx11/impl/com_ptr.h
         src/renderer/dx11/dx11_renderer.cpp
 
         include/galena/window/win32/event_identifier.h
