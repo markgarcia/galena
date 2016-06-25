@@ -2,7 +2,7 @@ project(galena-cpp-shader-compiler)
 cmake_minimum_required(VERSION 2.8)
 
 set(SRC_LIST
-    main.cpp)
+    src/main.cpp)
 
 include_directories(extlibs/include)
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/extlibs/lib)
