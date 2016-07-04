@@ -1,7 +1,16 @@
-#include "galena/window_render_surface.h"
-#include "galena/renderer.h"
-#include "galena/window.h"
-#include "galena/application.h"
+#include <galena/shader/shader.h>
+#include <galena/window_render_surface.h>
+#include <galena/renderer.h>
+#include <galena/window.h>
+#include <galena/application.h>
+
+
+galena::float4 vertex_shader(galena::float4 pos);
+galena::float4 pixel_shader(galena::float4);
+
+
+
+void func();
 
 
 int main() {

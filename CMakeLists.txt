@@ -5,7 +5,7 @@ if(CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -Wall -pedantic")
 endif()
 
-find_package(Boost 1.60 REQUIRED COMPONENTS program_options)
+find_package(Boost 1.61 REQUIRED COMPONENTS program_options filesystem)
 include_directories(${Boost_INCLUDE_DIRS})
 
 include_directories(include)
@@ -20,7 +20,9 @@ set(SRC_LIST
 
     include/galena/window.h
     include/galena/window/window_event.h
-    src/window.cpp)
+    src/window.cpp
+
+    include/galena/shader/shader.h)
 
 if(WIN32)
     add_definitions(-DUNICODE)
