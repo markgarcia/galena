@@ -19,14 +19,14 @@ set(SRC_LIST
 include_directories(include
                     ${LLVM_DIR}/tools/clang/include)
 
-find_library(LIBCLANG clang PATHS ${LLVM_BUILD_DIR}/lib)
+find_library(LIBCLANG liblibclang.dll.a PATHS ${LLVM_BUILD_DIR}/lib)
 if(NOT LIBCLANG)
     message(SEND_ERROR "Cannot find libclang library file.")
 endif()
 
-add_library(${PROJECT_NAME} ${SRC_LIST})
+add_library(${PROJECT_NAME} SHARED ${SRC_LIST})
 target_link_libraries(${PROJECT_NAME}
-                      ${LIB_CLANG}
+                      ${LIBCLANG}
                       Boost::program_options
                       Boost::filesystem
                       Dbghelp)
