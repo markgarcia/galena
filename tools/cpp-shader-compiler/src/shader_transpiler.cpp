@@ -1,5 +1,7 @@
 #include "galena/shader_transpiler.h"
 
+#include <clang-c/Index.h>
+
 #include <iostream>
 
 
@@ -102,10 +104,11 @@ shader_transpiler::shader_transpiler(const std::string& function_name,
     }
 
     auto cursor = clang_getTranslationUnitCursor(translation_unit);
-    clang_visitChildren(cursor, cursor_visitor, this);
+    CXChildVisitResult shader_transpiler_cursor_visitor(CXCursor, CXCursor, CXClientData);
+    clang_visitChildren(cursor, shader_transpiler_cursor_visitor, this);
 }
 
-CXChildVisitResult shader_transpiler::cursor_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
+CXChildVisitResult shader_transpiler_cursor_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
     auto& transpiler = *static_cast<shader_transpiler*>(client_data);
 
     return CXChildVisit_Break;

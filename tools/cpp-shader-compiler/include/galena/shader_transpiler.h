@@ -2,8 +2,6 @@
 
 #include <galena/shader/shader_model.h>
 
-#include <clang-c/Index.h>
-
 #include <boost/filesystem.hpp>
 
 
@@ -17,9 +15,6 @@ public:
                       const boost::filesystem::path& galena_include_dir);
 
     galena::shader_model get_shader_model();
-
-private:
-    static CXChildVisitResult cursor_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data);
 };
 
 
