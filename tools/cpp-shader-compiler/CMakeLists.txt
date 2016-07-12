@@ -1,12 +1,32 @@
 project(galena-cpp-shader-compiler)
 cmake_minimum_required(VERSION 2.8)
 
+get_cmake_property(VAR LLVM_DIR)
+if(NOT LLVM_DIR)
+    message(SEND_ERROR "LLVM_DIR must be set to LLVM's root directory.")
+endif()
+
+get_cmake_property(VAR LLVM_BUILD_DIR)
+if(NOT LLVM_BUILD_DIR)
+    message(SEND_ERROR "LLVM_BUILD_DIR must be set to LLVM's build directory.")
+endif()
+
 set(SRC_LIST
-    src/main.cpp)
 
-include_directories(extlibs/include)
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/extlibs/lib)
+    include/shader_transpiler.h
+    src/shader_transpiler.cpp)
 
-add_executable(${PROJECT_NAME} ${SRC_LIST})
-target_link_libraries(${PROJECT_NAME} clang)
-target_link_libraries(${PROJECT_NAME} Boost::program_options Boost::filesystem)
+include_directories(include
+                    ${LLVM_DIR}/tools/clang/include)
+
+find_library(LIBCLANG clang PATHS ${LLVM_BUILD_DIR}/lib)
+if(NOT LIBCLANG)
+    message(SEND_ERROR "Cannot find libclang library file.")
+endif()
+
+add_library(${PROJECT_NAME} ${SRC_LIST})
+target_link_libraries(${PROJECT_NAME}
+                      ${LIB_CLANG}
+                      Boost::program_options
+                      Boost::filesystem
+                      Dbghelp)
