@@ -1,6 +1,9 @@
-#include "shader_transpiler.h"
+#include "galena/shader_transpiler.h"
 
 #include <iostream>
+
+
+namespace galena {
 
 
 class clang_string {
@@ -106,4 +109,7 @@ CXChildVisitResult shader_transpiler::cursor_visitor(CXCursor cursor, CXCursor p
     auto& transpiler = *static_cast<shader_transpiler*>(client_data);
 
     return CXChildVisit_Break;
+}
+
+
 }

@@ -13,7 +13,7 @@ endif()
 
 set(SRC_LIST
 
-    include/shader_transpiler.h
+    include/galena/shader_transpiler.h
     src/shader_transpiler.cpp)
 
 include_directories(include

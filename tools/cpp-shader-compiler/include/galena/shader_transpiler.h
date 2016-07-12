@@ -7,6 +7,8 @@
 #include <boost/filesystem.hpp>
 
 
+namespace galena {
+
 
 class shader_transpiler {
 public:
@@ -19,3 +21,6 @@ public:
 private:
     static CXChildVisitResult cursor_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data);
 };
+
+
+}
