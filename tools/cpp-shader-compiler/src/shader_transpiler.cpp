@@ -96,7 +96,7 @@ shader_transpiler::shader_transpiler(const std::string& function_name,
         }
 
         clang_string diagnosticMessage = clang_formatDiagnostic(diagnostic, CXDiagnostic_DisplaySourceLocation);
-        std::cout << diagnosticMessage.c_str();
+        std::cout << diagnosticMessage.c_str() << std::endl;
     }
 
     if(has_error) {

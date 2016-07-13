@@ -22,7 +22,8 @@ set(SRC_LIST
     include/galena/window/window_event.h
     src/window.cpp
 
-    include/galena/shader/shader.h)
+    include/galena/shader/shader.h
+    include/galena/shader/shader_model.h)
 
 if(WIN32)
     add_definitions(-DUNICODE)
