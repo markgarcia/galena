@@ -13,9 +13,9 @@ endif()
 
 set(SRC_LIST
 
-    include/galena/shader_transpiler.h
+    include/galena/shader_compiler.h
     include/galena/source_location.h
-    src/shader_transpiler.cpp
+    src/shader_compiler.cpp
     src/source_location.cpp)
 
 include_directories(include

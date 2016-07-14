@@ -1,4 +1,4 @@
-#include "galena/shader_transpiler.h"
+#include "galena/shader_compiler.h"
 
 #include <clang-c/Index.h>
 
@@ -66,9 +66,9 @@ public:
 };
 
 
-shader_transpiler::shader_transpiler(const std::string& function_name,
-                                     const boost::filesystem::path& source_file,
-                                     const boost::filesystem::path& galena_include_dir) {
+shader_compiler::shader_compiler(const std::string& function_name,
+                                 const boost::filesystem::path& source_file,
+                                 const boost::filesystem::path& galena_include_dir) {
     clang_resource<CXIndex, clang_disposeIndex> index = clang_createIndex(0, 0);
 
     std::string galena_include_dir_str = "-I" + galena_include_dir.string();
@@ -104,12 +104,12 @@ shader_transpiler::shader_transpiler(const std::string& function_name,
     }
 
     auto cursor = clang_getTranslationUnitCursor(translation_unit);
-    CXChildVisitResult shader_transpiler_cursor_visitor(CXCursor, CXCursor, CXClientData);
-    clang_visitChildren(cursor, shader_transpiler_cursor_visitor, this);
+    CXChildVisitResult shader_compiler_cursor_visitor(CXCursor, CXCursor, CXClientData);
+    clang_visitChildren(cursor, shader_compiler_cursor_visitor, this);
 }
 
-CXChildVisitResult shader_transpiler_cursor_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
-    auto& transpiler = *static_cast<shader_transpiler*>(client_data);
+CXChildVisitResult shader_compiler_cursor_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
+    auto& compiler = *static_cast<shader_compiler*>(client_data);
 
     return CXChildVisit_Break;
 }
