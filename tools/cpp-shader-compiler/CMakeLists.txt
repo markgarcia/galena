@@ -70,4 +70,4 @@ target_link_libraries(${PROJECT_NAME}
                       Boost::filesystem
                       Dbghelp)
 
-set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ../bin)
+set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ../../bin)

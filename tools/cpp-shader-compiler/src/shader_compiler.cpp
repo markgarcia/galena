@@ -1,8 +1,11 @@
 #include "galena/shader_compiler.h"
 
+#include <llvm/DebugInfo/Symbolize/Symbolize.h>
 #include <clang-c/Index.h>
 
+#include <boost/optional.hpp>
 #include <iostream>
+#include <algorithm>
 
 
 namespace galena {
@@ -66,9 +69,21 @@ public:
 };
 
 
-shader_compiler::shader_compiler(const std::string& function_name,
-                                 const boost::filesystem::path& source_file,
-                                 const boost::filesystem::path& galena_include_dir) {
+class clang_cursor_visitor {
+public:
+    struct function_visitor_data {
+        shader_compiler& compiler;
+        const std::string& required_function_name;
+        boost::optional<shader_model::function> function;
+    };
+
+    static CXChildVisitResult function_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data);
+};
+
+
+galena::shader_model::function shader_compiler::compile(const std::string& function_name,
+                                                        const boost::filesystem::path& source_file,
+                                                        const boost::filesystem::path& galena_include_dir) {
     clang_resource<CXIndex, clang_disposeIndex> index = clang_createIndex(0, 0);
 
     std::string galena_include_dir_str = "-I" + galena_include_dir.string();
@@ -104,14 +119,41 @@ shader_compiler::shader_compiler(const std::string& function_name,
     }
 
     auto cursor = clang_getTranslationUnitCursor(translation_unit);
-    CXChildVisitResult shader_compiler_cursor_visitor(CXCursor, CXCursor, CXClientData);
-    clang_visitChildren(cursor, shader_compiler_cursor_visitor, this);
+
+    clang_cursor_visitor::function_visitor_data visitor_data { *this, function_name, boost::none };
+    clang_visitChildren(cursor, clang_cursor_visitor::function_visitor, &visitor_data);
+    if(!visitor_data.function) throw std::runtime_error("Function not found.");
+
+    return std::move(visitor_data.function.get());
 }
 
-CXChildVisitResult shader_compiler_cursor_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
-    auto& compiler = *static_cast<shader_compiler*>(client_data);
 
-    return CXChildVisit_Break;
+CXChildVisitResult clang_cursor_visitor::function_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
+    auto& data = *static_cast<clang_cursor_visitor::function_visitor_data*>(client_data);
+
+    // Find desired function
+    if(clang_getCursorKind(cursor) == CXCursor_FunctionDecl) {
+        clang_string func_mangled_name = clang_Cursor_getMangling(cursor);
+        auto func_name = llvm::symbolize::LLVMSymbolizer::DemangleName(func_mangled_name.c_str(), nullptr);
+        if(data.required_function_name == func_name) {
+            auto shader_func_name = func_name.substr(0, func_name.find_first_of('('));
+            auto iter = shader_func_name.begin();
+
+            while(iter != shader_func_name.end()) {
+                auto colon = std::adjacent_find(iter, shader_func_name.end(),
+                                                [](auto first, auto second) { return first == second && first == ':'; });
+                if(colon == shader_func_name.end()) break;
+                *colon = '_';
+                iter = std::copy(colon + 2, std::find(colon + 2, shader_func_name.end(), ':'), colon + 1);
+                shader_func_name.erase(shader_func_name.end() - 1);
+            }
+
+            data.function = shader_model::function();
+            data.function->set_name(std::move(shader_func_name));
+        }
+    }
+
+    return CXChildVisit_Recurse;
 }
 
 

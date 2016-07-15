@@ -23,7 +23,8 @@ set(SRC_LIST
     src/window.cpp
 
     include/galena/shader/shader.h
-    include/galena/shader/shader_model.h)
+    include/galena/shader/shader_model.h
+    src/shader/shader_model.cpp)
 
 if(WIN32)
     add_definitions(-DUNICODE)

@@ -10,11 +10,12 @@ namespace galena {
 
 class shader_compiler {
 public:
-    shader_compiler(const std::string& function_name,
-                    const boost::filesystem::path& source_file,
-                    const boost::filesystem::path& galena_include_dir);
+    galena::shader_model::function compile(const std::string& function_name,
+                                           const boost::filesystem::path& source_file,
+                                           const boost::filesystem::path& galena_include_dir);
 
-    galena::shader_model get_shader_model();
+private:
+    friend class clang_cursor_visitor;
 };
 
 
