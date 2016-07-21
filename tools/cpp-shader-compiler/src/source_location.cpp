@@ -17,7 +17,7 @@ function_location locate_function(uint64_t func_address) {
 
     return {
         line_info.get().FileName,
-        line_info.get().FunctionName,
+        "::" + line_info.get().FunctionName,
         line_info.get().Line,
         line_info.get().Column
     };

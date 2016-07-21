@@ -75,12 +75,17 @@ public:
     void add_parameter(function_parameter parameter) { m_parameters.emplace_back(std::move(parameter)); }
     const std::vector<function_parameter>& get_parameters() const { return m_parameters; }
 
-    boost::typeindex::type_index get_return_type() const;
-    const std::vector<operation>& get_operations() const;
+    void set_return_type(boost::typeindex::type_index type) { m_return_type = type; }
+    boost::typeindex::type_index get_return_type() const { return m_return_type; }
+
+    void add_operation(operation op) { m_operations.emplace_back(std::move(op)); }
+    const std::vector<operation>& get_operations() const { return m_operations; }
 
 private:
     std::string m_name;
+    boost::typeindex::type_index m_return_type;
     std::vector<function_parameter> m_parameters;
+    std::vector<operation> m_operations;
 };
 
 

@@ -30,7 +30,7 @@ void renderer::render_on(window_render_surface& surface) {
 std::string renderer::compile_shader(uint64_t func_address) {
     auto location = locate_function(func_address);
     auto galena_include_dir = boost::filesystem::path(__FILE__).parent_path().parent_path() / "include";
-    shader_compiler().compile(location.function_name, location.source_file, galena_include_dir);
+    shader_compiler().compile(location.function_signature, location.source_file, galena_include_dir);
     return "";
 }
 

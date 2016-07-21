@@ -2,9 +2,13 @@
 
 #include "galena/shader/shader.h"
 
-#include <llvm/DebugInfo/Symbolize/Symbolize.h>
-#include <clang-c/Index.h>
+#include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/Frontend/CompilerInstance.h>
+#include <clang/Tooling/Tooling.h>
 
+#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string/trim.hpp>
 #include <boost/optional.hpp>
 #include <boost/operators.hpp>
 #include <iostream>
@@ -14,86 +18,194 @@
 namespace galena {
 
 
-class clang_string
-    : boost::equality_comparable<clang_string, std::string>,
-      boost::equality_comparable<clang_string, const char*>{
-    CXString m_string;
-    bool m_has_string = true;
+class clang_ast_consumer : public clang::ASTConsumer {
+    class match_finder_wrapper {
+    public:
+        match_finder_wrapper(clang::ASTContext& context) : m_context(context) {}
 
-public:
-    clang_string(CXString string) : m_string(string) {}
-    ~clang_string() { if(m_has_string) clang_disposeString(m_string); }
+        template<typename node_type, typename matcher_type, typename callback_type>
+        void add_matcher(const matcher_type& matcher, std::string id,
+                         callback_type&& callback) {
+            class match_callback_wrapper : public clang::ast_matchers::MatchFinder::MatchCallback {
+            public:
+                match_callback_wrapper(std::string id, callback_type&& callback)
+                    : m_id(std::move(id)), m_callback(std::forward<callback_type>(callback)) {}
 
-    clang_string(const clang_string&) = delete;
-    clang_string& operator=(const clang_string&) = delete;
+                void run(const clang::ast_matchers::MatchFinder::MatchResult& result) override {
+                    m_callback(result.Nodes.getNodeAs<node_type>(m_id));
+                }
 
-    clang_string(clang_string&& rhs) {
-        m_string = rhs.m_string;
-        rhs.m_has_string = false;
-    }
+            private:
+                std::string m_id;
+                typename std::remove_reference<callback_type>::type m_callback;
+            };
 
-    clang_string& operator=(clang_string&& rhs) {
-        m_string = rhs.m_string;
-        m_has_string = true;
-        rhs.m_has_string = false;
+            auto match_callback = std::make_unique<match_callback_wrapper>(std::move(id), std::forward<callback_type>(callback));
+            m_match_finder.addMatcher(matcher, match_callback.get());
+            m_match_callbacks.emplace_back(std::move(match_callback));
+        }
 
-        return *this;
-    }
+        void match() {
+            m_match_finder.matchAST(m_context);
+        }
 
-    const char* c_str() const { return clang_getCString(m_string); }
-};
-
-
-bool operator==(const clang_string& lhs, const std::string& rhs) { return lhs.c_str() == rhs; }
-bool operator==(const clang_string& lhs, const char* rhs) { return std::strcmp(lhs.c_str(), rhs) == 0; }
-
-
-template<typename clang_type, void (*deleter)(clang_type)>
-class clang_resource {
-    clang_type m_resource;
-    bool m_has_resource = true;
-
-public:
-    clang_resource(clang_type resource) : m_resource(resource) {}
-    ~clang_resource() { if(m_has_resource) deleter(m_resource); }
-
-    clang_resource(const clang_resource&) = delete;
-    clang_resource& operator=(const clang_resource&) = delete;
-
-    clang_resource(clang_resource&& rhs) {
-        m_resource = rhs.m_resource;
-        rhs.m_has_resource = false;
-    }
-
-    clang_resource& operator=(clang_resource&& rhs) {
-        m_resource = rhs.m_resource;
-        m_has_resource = true;
-        rhs.m_has_resource = false;
-
-        return *this;
-    }
-
-    clang_type& get() { return m_resource; }
-    operator clang_type&() { return m_resource; }
-};
-
-
-struct shader_compiler::galena_shader_types {
-    CXType float4_type;
-};
-
-
-class clang_cursor_visitor {
-public:
-    struct function_visitor_data {
-        shader_compiler& compiler;
-        const std::string& required_function_name;
-        boost::optional<shader_model::function> function;
+    private:
+        clang::ASTContext& m_context;
+        clang::ast_matchers::MatchFinder m_match_finder;
+        std::vector<std::unique_ptr<clang::ast_matchers::MatchFinder::MatchCallback>> m_match_callbacks;
     };
 
-    static CXChildVisitResult function_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data);
+public:
+    clang_ast_consumer(std::string function_signature, shader_model::function& function)
+        : m_function_signature(std::move(function_signature)), m_function(function) {}
 
-    static CXChildVisitResult galena_shader_types_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data);
+    void HandleTranslationUnit(clang::ASTContext& context) override {
+        using namespace clang::ast_matchers;
+
+        match_finder_wrapper galena_types_match_finder(context);
+
+        auto galena_type_matcher = recordDecl(hasName("::galena::float4")).bind("galena_float4");
+        galena_types_match_finder.add_matcher<clang::RecordDecl>(galena_type_matcher, "galena_float4",
+                                                                 [this, &context](const clang::RecordDecl* decl) {
+            m_galena_float4_type = context.getRecordType(decl).getTypePtr()->getUnqualifiedDesugaredType();
+        });
+
+        galena_types_match_finder.match();
+
+
+        auto function_name = std::string(m_function_signature.begin(),
+                                         std::find(m_function_signature.begin(), m_function_signature.end(), '('));
+        auto function_matcher = functionDecl(hasName(function_name), isDefinition()).bind("shader_function");
+
+        auto function_parameters_str = std::string(std::find(m_function_signature.begin(), m_function_signature.end(), '(') + 1,
+                                                   (std::find(m_function_signature.rbegin(), m_function_signature.rend(), ')') + 1).base());
+        std::vector<std::string> function_parameter_str_set;
+        boost::algorithm::split(function_parameter_str_set, function_parameters_str, [](char c) { return c == ','; });
+
+        std::vector<clang::QualType> function_parameters;
+
+        for(const auto& temp_func_param_str : function_parameter_str_set) {
+            auto func_param_str = boost::algorithm::trim_copy(temp_func_param_str);
+            if(func_param_str == "galena::float4") {
+                if(!m_galena_float4_type) throw std::runtime_error("Unknown type.");
+                clang::Qualifiers qualifiers;
+                function_parameters.emplace_back(clang::QualType(m_galena_float4_type, qualifiers.getAsOpaqueValue()).getCanonicalType());
+            }
+        }
+
+        const clang::FunctionDecl* function = nullptr;
+
+        match_finder_wrapper function_match_finder(context);
+        function_match_finder.add_matcher<clang::FunctionDecl>(function_matcher, "shader_function",
+                                                               [&function, &function_parameters](const clang::FunctionDecl* func) {
+            auto num_params = func->getNumParams();
+            if(num_params != function_parameters.size()) return;
+
+            for(unsigned int i = 0; i < num_params; ++i) {
+                if(func->getParamDecl(i)->getType().getCanonicalType() != function_parameters[i]) return;
+            };
+
+            function = func;
+        });
+
+        function_match_finder.match();
+
+        if(!function) throw std::runtime_error("Unable to locate function.");
+        process_function(function);
+    }
+
+    void process_function(const clang::FunctionDecl* func) {
+        m_function.set_return_type(get_type_index_for_clang_type(func->getReturnType()));
+        m_function.set_name(func->getName());
+
+        for(unsigned int i = 0, num_params = func->getNumParams(); i < num_params; ++i) {
+            auto param = func->getParamDecl(i);
+            auto clang_param_name = param->getName();
+            std::string param_name;
+            if(clang_param_name == "") {
+                param_name = m_function.get_name() + "_parameter_" + std::to_string(i);
+            }
+            else {
+                param_name = clang_param_name;
+            }
+
+            m_function.add_parameter({
+                get_type_index_for_clang_type(param->getType()),
+                std::move(param_name)
+            });
+        }
+    }
+
+private:
+    boost::typeindex::type_index get_type_index_for_clang_type(const clang::Type* clang_type) {
+        if(clang_type->getUnqualifiedDesugaredType() == m_galena_float4_type) {
+            return boost::typeindex::type_id<galena::float4>();
+        }
+
+        throw std::runtime_error("Unrecognized type.");
+    }
+
+    boost::typeindex::type_index get_type_index_for_clang_type(clang::QualType clang_qual_type) {
+        return get_type_index_for_clang_type(clang_qual_type.getTypePtr());
+    }
+
+
+    std::string m_function_signature;
+    shader_model::function& m_function;
+
+    const clang::Type* m_galena_float4_type = nullptr;
+};
+
+
+class clang_diagnostic_consumer : public clang::DiagnosticConsumer {
+public:
+    void HandleDiagnostic(clang::DiagnosticsEngine::Level diag_level,
+                          const clang::Diagnostic& diag_info) override {
+        if(diag_level == clang::DiagnosticsEngine::Level::Warning
+            || diag_level == clang::DiagnosticsEngine::Level::Error
+            || diag_level == clang::DiagnosticsEngine::Level::Fatal) {
+            clang::SmallString<256> message;
+            diag_info.FormatDiagnostic(message);
+            std::cout << message.c_str() << std::endl;
+        }
+    }
+
+    void finish() override {
+        if(NumErrors != 0) {
+            throw std::runtime_error("Shader code has error(s).");
+        }
+    }
+};
+
+
+class clang_frontend_action : public clang::ASTFrontendAction {
+public:
+    clang_frontend_action(std::string function_signature, shader_model::function& function)
+        : m_function_signature(std::move(function_signature)), m_function(function) {}
+
+    std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance& compiler,
+                                                          clang::StringRef file) override {
+        return std::make_unique<clang_ast_consumer>(std::move(m_function_signature), m_function);
+    }
+
+private:
+    std::string m_function_signature;
+    shader_model::function& m_function;
+};
+
+
+class clang_frontend_action_factory : public clang::tooling::FrontendActionFactory {
+public:
+    clang_frontend_action_factory(std::string function_signature, shader_model::function& function)
+        : m_function_signature(std::move(function_signature)), m_function(function) {}
+
+    clang::FrontendAction *create() override {
+        return new clang_frontend_action(m_function_signature, m_function);
+    }
+
+private:
+    std::string m_function_signature;
+    shader_model::function& m_function;
 };
 
 
@@ -101,140 +213,29 @@ shader_compiler::shader_compiler() = default;
 shader_compiler::~shader_compiler() = default;
 
 
-shader_model::function shader_compiler::compile(const std::string& function_name,
+shader_model::function shader_compiler::compile(std::string function_signature,
                                                 const boost::filesystem::path& source_file,
                                                 const boost::filesystem::path& galena_include_dir) {
-    clang_resource<CXIndex, clang_disposeIndex> index = clang_createIndex(0, 0);
-
     std::string galena_include_dir_str = "-I" + galena_include_dir.string();
-    std::array<const char*, 2> args = {
+    std::array<const char*, 3> args = {
+        "--",
         "-std=c++14",
         galena_include_dir_str.c_str()
     };
 
-    clang_resource<CXTranslationUnit, clang_disposeTranslationUnit> translation_unit(
-        clang_parseTranslationUnit(
-            index, source_file.generic_string().c_str(),
-            args.data(), args.size(), NULL, 0, CXTranslationUnit_None));
+    int argc = args.size();
+    std::unique_ptr<clang::tooling::FixedCompilationDatabase> compilations(
+        clang::tooling::FixedCompilationDatabase::loadFromCommandLine(argc, args.data()));
 
-    if(!translation_unit) {
-        throw std::invalid_argument("Invalid source file.");
-    }
+    clang::tooling::ClangTool tool(*compilations, { source_file.string() });
+    auto diagnostic_consumer = std::make_unique<clang_diagnostic_consumer>();
+    tool.setDiagnosticConsumer(diagnostic_consumer.get());
 
-    bool has_error = false;
-    for(unsigned i = 0; i < clang_getNumDiagnostics(translation_unit); i++) {
-        clang_resource<CXDiagnostic, clang_disposeDiagnostic> diagnostic = clang_getDiagnostic(translation_unit, i);
-        auto severity = clang_getDiagnosticSeverity(diagnostic);
+    shader_model::function function;
+    auto frontend_action_factory = std::make_unique<clang_frontend_action_factory>(std::move(function_signature), function);
+    tool.run(frontend_action_factory.get());
 
-        if(severity == CXDiagnostic_Error || severity == CXDiagnostic_Fatal) {
-            has_error = true;
-        }
-
-        clang_string diagnosticMessage = clang_formatDiagnostic(diagnostic, CXDiagnostic_DisplaySourceLocation);
-        std::cout << diagnosticMessage.c_str() << std::endl;
-    }
-
-    if(has_error) {
-        throw std::runtime_error("Source file has error(s).");
-    }
-
-    auto cursor = clang_getTranslationUnitCursor(translation_unit);
-
-    m_shader_types = std::make_unique<galena_shader_types>();
-
-    // Initialize with invalid type
-    auto invalid_type = clang_getCursorType(cursor);
-    m_shader_types->float4_type = invalid_type;
-
-    clang_visitChildren(cursor, clang_cursor_visitor::galena_shader_types_visitor, m_shader_types.get());
-
-    clang_cursor_visitor::function_visitor_data visitor_data { *this, function_name, boost::none };
-    clang_visitChildren(cursor, clang_cursor_visitor::function_visitor, &visitor_data);
-    if(!visitor_data.function) throw std::runtime_error("Function not found.");
-
-    return std::move(visitor_data.function.get());
-}
-
-
-CXChildVisitResult clang_cursor_visitor::galena_shader_types_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
-    if(clang_getCursorKind(cursor) == CXCursor_Namespace) {
-        clang_string name = clang_getCursorSpelling(cursor);
-        if(name != "galena") return CXChildVisit_Continue;
-
-        clang_visitChildren(cursor, [](CXCursor cursor, CXCursor parent, CXClientData client_data) {
-            if(clang_getCursorKind(cursor) == CXCursor_StructDecl) {
-                auto& shader_types = *static_cast<shader_compiler::galena_shader_types*>(client_data);
-
-                clang_string name = clang_getCursorSpelling(cursor);
-                if(name == "float4") {
-                    shader_types.float4_type = clang_getCursorType(cursor);
-                }
-            }
-
-            return CXChildVisit_Continue;
-        }, client_data);
-
-        return CXChildVisit_Break;
-    }
-
-    return CXChildVisit_Continue;
-}
-
-
-CXChildVisitResult clang_cursor_visitor::function_visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
-    auto& data = *static_cast<clang_cursor_visitor::function_visitor_data*>(client_data);
-
-    // Find desired function
-    if(clang_getCursorKind(cursor) == CXCursor_FunctionDecl) {
-        clang_string func_mangled_name = clang_Cursor_getMangling(cursor);
-        auto func_name = llvm::symbolize::LLVMSymbolizer::DemangleName(func_mangled_name.c_str(), nullptr);
-        if(data.required_function_name != func_name) return CXChildVisit_Continue;
-
-        auto shader_func_name = func_name.substr(0, func_name.find_first_of('('));
-        auto iter = shader_func_name.begin();
-
-        while(iter != shader_func_name.end()) {
-            auto colon = std::adjacent_find(iter, shader_func_name.end(),
-                                            [](auto first, auto second) { return first == second && first == ':'; });
-            if(colon == shader_func_name.end()) break;
-            *colon = '_';
-            iter = std::copy(colon + 2, std::find(colon + 2, shader_func_name.end(), ':'), colon + 1);
-            shader_func_name.erase(shader_func_name.end() - 1);
-        }
-
-        data.function = shader_model::function();
-        data.function->set_name(std::move(shader_func_name));
-
-        auto definition = clang_getCursorDefinition(cursor);
-
-        // Get parameters
-        auto num_params = clang_Cursor_getNumArguments(definition);
-        for(decltype(num_params) i = 0; i < num_params; ++i) {
-            auto param = clang_Cursor_getArgument(definition, static_cast<unsigned int>(i));
-            auto param_clang_type = clang_getCursorType(param);
-
-            boost::typeindex::type_index param_type;
-            if(clang_equalTypes(param_clang_type, data.compiler.m_shader_types->float4_type)) {
-                param_type = boost::typeindex::type_id<galena::float4>();
-            }
-
-            clang_string param_name = clang_getCursorSpelling(param);
-            if(param_name == "") {
-                data.function->add_parameter({
-                    param_type,
-                    data.function->get_name() + "_parameter_" + std::to_string(data.function->get_parameters().size())
-                });
-            }
-            else {
-                data.function->add_parameter({ param_type, param_name.c_str() });
-            }
-        }
-
-
-        return CXChildVisit_Break;
-    }
-
-    return CXChildVisit_Recurse;
+    return function;
 }
 
 
