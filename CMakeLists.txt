@@ -18,6 +18,9 @@ set(SRC_LIST
     src/renderer.cpp
     src/window_render_surface.cpp
 
+    include/galena/shader/codegen/hlsl.h
+    src/shader/codegen/hlsl.cpp
+
     include/galena/window.h
     include/galena/window/window_event.h
     src/window.cpp
@@ -50,10 +53,10 @@ endif()
 add_library(galena ${SRC_LIST})
 
 if(WIN32)
-    target_link_libraries(galena D3D11)
+    target_link_libraries(galena D3D11 D3DCompiler_47)
 endif()
 
 add_subdirectory(tools/cpp-shader-compiler)
 add_subdirectory(tests)
 
-target_include_directories(galena PRIVATE tools/cpp-shader-compiler/include)
+target_include_directories(galena PUBLIC tools/cpp-shader-compiler/include)

@@ -1,13 +1,13 @@
 #include "galena/renderer.h"
 
 #include "galena/renderer/dx11/dx11_renderer.h"
-#include "galena/shader_compiler.h"
 #include "galena/source_location.h"
 
 
 namespace galena {
 
 
+impl::compiled_vertex_shader::~compiled_vertex_shader() = default;
 impl::renderer_impl::~renderer_impl() = default;
 
 
@@ -27,11 +27,11 @@ void renderer::render_on(window_render_surface& surface) {
     m_impl->render_on(surface);
 }
 
-std::string renderer::compile_shader(uint64_t func_address) {
+std::unique_ptr<impl::compiled_vertex_shader> renderer::compile_shader(uint64_t func_address) {
     auto location = locate_function(func_address);
     auto galena_include_dir = boost::filesystem::path(__FILE__).parent_path().parent_path() / "include";
-    shader_compiler().compile(location.function_signature, location.source_file, galena_include_dir);
-    return "";
+    auto shader_model = m_compiler.compile(location.function_signature, location.source_file, galena_include_dir);
+    return m_impl->compile_vertex_shader(shader_model);
 }
 
 

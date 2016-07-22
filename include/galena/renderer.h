@@ -1,6 +1,8 @@
 #pragma once
 
 #include "galena/window.h"
+#include "galena/shader_compiler.h"
+
 #include <memory>
 
 
@@ -13,11 +15,18 @@ class window_render_surface;
 namespace impl {
 
 
+class compiled_vertex_shader {
+public:
+    virtual ~compiled_vertex_shader() = 0;
+};
+
+
 class renderer_impl {
 public:
     virtual ~renderer_impl() = 0;
 
     virtual void render_on(window_render_surface& surface) = 0;
+    virtual std::unique_ptr<compiled_vertex_shader> compile_vertex_shader(const shader_model::function&) = 0;
 };
 
 
@@ -36,8 +45,8 @@ public:
 
     void render_on(window_render_surface& surface);
 
-    template<typename return_type, typename... arg_types>
-    void set_vertex_shader(return_type (*func)(arg_types...)) {
+    template<typename return_type, typename... param_types>
+    void set_vertex_shader(return_type (*func)(param_types...)) {
         compile_shader(reinterpret_cast<uint64_t>(func));
     }
 
@@ -45,8 +54,9 @@ public:
 
 private:
     std::unique_ptr<impl::renderer_impl> m_impl;
+    shader_compiler m_compiler;
 
-    std::string compile_shader(uint64_t func_address);
+    std::unique_ptr<impl::compiled_vertex_shader> compile_shader(uint64_t func_address);
 };
 
 

@@ -20,7 +20,7 @@ public:
     boost::typeindex::type_index get_type() const { return m_type; }
 
     void set_name(std::string name) { m_name = std::move(name); }
-    const std::string& get_name() { return m_name; }
+    const std::string& get_name() const { return m_name; }
 
 private:
     boost::typeindex::type_index m_type;
