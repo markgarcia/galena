@@ -4,6 +4,7 @@
 #include "galena/shader_compiler.h"
 
 #include <memory>
+#include <tuple>
 
 
 namespace galena {
@@ -21,16 +22,54 @@ public:
 };
 
 
+struct input_buffer {
+    const void* data;
+    std::size_t buffer_size;
+    std::size_t element_size;
+};
+
+
 class renderer_impl {
 public:
     virtual ~renderer_impl() = 0;
 
     virtual void render_on(window_render_surface& surface) = 0;
     virtual std::unique_ptr<compiled_vertex_shader> compile_vertex_shader(const shader_model::function&) = 0;
+    virtual void set_vertex_shader(compiled_vertex_shader* shader) = 0;
+    virtual void set_vertex_shader_state(std::vector<input_buffer> input_buffers) = 0;
 };
 
 
 }
+
+
+template<typename... input_param_types>
+class vertex_shader_state {
+public:
+    template<unsigned int param_index, template<typename type> class buffer_type>
+    void set_input(const buffer_type<std::tuple_element_t<param_index, std::tuple<input_param_types...>>>& source_buffer) {
+        auto buffer = std::get<param_index>(m_buffers);
+        buffer.clear();
+        buffer.resize(source_buffer.size());
+        std::copy(source_buffer.begin(), source_buffer.end(), buffer.begin());
+    }
+
+    template<unsigned int param_index, std::size_t array_size>
+    void set_input(const std::array<std::tuple_element_t<param_index, std::tuple<input_param_types...>>, array_size>& source_buffer) {
+        auto buffer = std::get<param_index>(m_buffers);
+        buffer.clear();
+        buffer.resize(source_buffer.size());
+        std::copy(source_buffer.begin(), source_buffer.end(), buffer.begin());
+    }
+
+    template<unsigned int param_index>
+    const std::vector<std::tuple_element_t<param_index, std::tuple<input_param_types...>>>& get_input() const {
+        return std::get<param_index>(m_buffers);
+    }
+
+private:
+    std::tuple<std::vector<input_param_types>...> m_buffers;
+};
 
 
 class renderer {
@@ -46,8 +85,17 @@ public:
     void render_on(window_render_surface& surface);
 
     template<typename return_type, typename... param_types>
-    void set_vertex_shader(return_type (*func)(param_types...)) {
-        compile_shader(reinterpret_cast<uint64_t>(func));
+    vertex_shader_state<param_types...> set_vertex_shader(return_type (*func)(param_types...)) {
+        set_vertex_shader(reinterpret_cast<uint64_t>(func));
+        return {};
+    }
+
+    template<typename... input_param_types>
+    void set_vertex_shader_state(const vertex_shader_state<input_param_types...>& state) {
+        std::vector<impl::input_buffer> input_buffers;
+        input_buffers.reserve(std::tuple_size<std::tuple<input_param_types...>>::value);
+        set_vertex_shader_state_helper<0, std::tuple_size<std::tuple<input_param_types...>>::value>::help(state, input_buffers);
+        m_impl->set_vertex_shader_state(input_buffers);
     }
 
     impl::renderer_impl& get_impl() { return *m_impl; }
@@ -56,7 +104,28 @@ private:
     std::unique_ptr<impl::renderer_impl> m_impl;
     shader_compiler m_compiler;
 
-    std::unique_ptr<impl::compiled_vertex_shader> compile_shader(uint64_t func_address);
+    void set_vertex_shader(uint64_t func_address);
+
+
+    template<unsigned int param_index, unsigned int end>
+    struct set_vertex_shader_state_helper {
+        template<typename... input_param_types>
+        static void help(const vertex_shader_state<input_param_types...>& state,
+                         std::vector<impl::input_buffer>& input_buffers) {
+            const auto& input = state.template get_input<param_index>();
+            input_buffers.emplace_back(input.data(),
+                                       sizeof(typename decltype(input)::value_type) * input.size(),
+                                       sizeof(typename decltype(input)::value_type));
+            set_vertex_shader_state_helper<param_index + 1, end>::help(state, input_buffers);
+        }
+    };
+
+    template<unsigned int end>
+    struct set_vertex_shader_state_helper<end, end> {
+        template<typename... input_param_types>
+        static void help(const vertex_shader_state<input_param_types...>&,
+                         std::vector<impl::input_buffer>&) {}
+    };
 };
 
 

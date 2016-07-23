@@ -23,15 +23,19 @@ renderer::renderer(renderer_type type)
     }
 }
 
+
 void renderer::render_on(window_render_surface& surface) {
     m_impl->render_on(surface);
 }
 
-std::unique_ptr<impl::compiled_vertex_shader> renderer::compile_shader(uint64_t func_address) {
+
+void renderer::set_vertex_shader(uint64_t func_address) {
     auto location = locate_function(func_address);
     auto galena_include_dir = boost::filesystem::path(__FILE__).parent_path().parent_path() / "include";
     auto shader_model = m_compiler.compile(location.function_signature, location.source_file, galena_include_dir);
-    return m_impl->compile_vertex_shader(shader_model);
+
+    auto shader = m_impl->compile_vertex_shader(shader_model);
+    m_impl->set_vertex_shader(shader.get());
 }
 
 

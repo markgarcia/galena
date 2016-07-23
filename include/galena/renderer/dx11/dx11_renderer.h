@@ -23,6 +23,8 @@ public:
 
     void render_on(window_render_surface& surface) override;
     std::unique_ptr<impl::compiled_vertex_shader> compile_vertex_shader(const shader_model::function&) override;
+    void set_vertex_shader(impl::compiled_vertex_shader* shader) override;
+    void set_vertex_shader_state(std::vector<impl::input_buffer> input_buffers) override;
 
 private:
     ComPtr<ID3D11Device> m_device;
