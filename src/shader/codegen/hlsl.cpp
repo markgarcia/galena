@@ -8,8 +8,21 @@ namespace shader_codegen {
 
 
 const char* hlsl_builder::get_shader_type_hlsl_equivalent(boost::typeindex::type_index type) {
-    if(type == boost::typeindex::type_id<galena::float4>()) {
+    if(type == boost::typeindex::type_id<galena::float4>()
+        || type == boost::typeindex::type_id<galena::pixel_shader_position>()) {
         return "float4";
+    }
+
+    throw std::runtime_error("Unknown/Unsupported type.");
+}
+
+
+const char* hlsl_builder::get_shader_type_semantic(boost::typeindex::type_index type) {
+    if(type == boost::typeindex::type_id<galena::float4>()) {
+        return "POSITION";
+    }
+    else if(type == boost::typeindex::type_id<galena::pixel_shader_position>()) {
+        return "SV_POSITION";
     }
 
     throw std::runtime_error("Unknown/Unsupported type.");
@@ -25,7 +38,7 @@ void hlsl_builder::build_function(const shader_model::function& function, std::s
     build_parameter_list(function.get_parameters(), hlsl);
     hlsl << ')';
 
-    hlsl << " : SV_POSITION";
+    hlsl << " : " << get_shader_type_semantic(function.get_return_type());
 
     hlsl << '{';
     build_function_body(function.get_operations(), hlsl);
@@ -42,7 +55,7 @@ void hlsl_builder::build_parameter_list(const std::vector<shader_model::function
              << ' '
              << parameters[i].get_name()
              << ':'
-             << "POSITION" << i;
+             << get_shader_type_semantic(parameters[i].get_type()) << i;
 
         if(i < parameters.size() - 1) hlsl << ',';
     }

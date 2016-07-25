@@ -22,8 +22,8 @@ public:
     void build_expression(const shader_model::expression& expression,
                           std::stringstream& hlsl);
 
-private:
     const char* get_shader_type_hlsl_equivalent(boost::typeindex::type_index type);
+    const char* get_shader_type_semantic(boost::typeindex::type_index type);
 };
 
 

@@ -9,8 +9,8 @@
 
 namespace shaders {
 
-galena::float4 vertex_shader(galena::float4 pos);
-galena::float4 pixel_shader(galena::float4);
+galena::pixel_shader_position vertex_shader(galena::float4 pos);
+galena::float4 pixel_shader(galena::pixel_shader_position);
 
 }
 

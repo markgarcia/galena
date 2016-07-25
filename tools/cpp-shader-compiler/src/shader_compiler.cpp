@@ -45,11 +45,68 @@ class clang_ast_consumer : public clang::ASTConsumer {
             m_match_callbacks.emplace_back(std::move(match_callback));
         }
 
+        template<typename type>
+        struct match_id {
+            match_id(std::string id) : id(std::move(id)) {}
+            std::string id;
+        };
+
+        template<typename matcher_type, typename... node_types, typename callback_type>
+        void add_multiple_matchers(const matcher_type& matcher,
+                                   std::tuple<match_id<node_types>...> ids,
+                                   callback_type&& callback) {
+            class match_callback_wrapper : public clang::ast_matchers::MatchFinder::MatchCallback {
+            public:
+                match_callback_wrapper(std::tuple<match_id<node_types>...> ids, callback_type&& callback)
+                    : m_ids(std::move(ids)), m_callback(std::forward<callback_type>(callback)) {}
+
+                void run(const clang::ast_matchers::MatchFinder::MatchResult& result) override {
+                    std::tuple<std::add_pointer_t<std::add_const_t<node_types>>...> arguments;
+                    callback_arguments_helper<0, sizeof...(node_types), node_types...>::help(result, m_ids, arguments);
+                    call_callback(m_callback, arguments, std::make_index_sequence<sizeof...(node_types)>());
+                }
+
+            private:
+                std::tuple<match_id<node_types>...> m_ids;
+                typename std::remove_reference<callback_type>::type m_callback;
+            };
+
+            auto match_callback = std::make_unique<match_callback_wrapper>(std::move(ids), std::forward<callback_type>(callback));
+            m_match_finder.addMatcher(matcher, match_callback.get());
+            m_match_callbacks.emplace_back(std::move(match_callback));
+        }
+
         void match() {
             m_match_finder.matchAST(m_context);
         }
 
     private:
+        template<typename callback_type, typename... node_types, std::size_t... idx>
+        static void call_callback(callback_type&& callback, std::tuple<node_types...> arguments, std::index_sequence<idx...>) {
+            std::forward<callback_type>(callback)(std::get<idx>(arguments)...);
+        }
+
+        template<unsigned int idx, unsigned int end, typename... node_types>
+        struct callback_arguments_helper {
+            static void help(const clang::ast_matchers::MatchFinder::MatchResult& result,
+                             const std::tuple<match_id<node_types>...>& ids,
+                             std::tuple<std::add_pointer_t<std::add_const_t<node_types>>...>& arguments) {
+                using node_type = std::tuple_element_t<idx, std::tuple<node_types...>>;
+                std::get<idx>(arguments)
+                    = result.Nodes.template getNodeAs<node_type>(
+                            std::get<idx>(ids).id);
+                callback_arguments_helper<idx + 1, end, node_types...>::help(result, ids, arguments);
+            }
+        };
+
+        template<unsigned int end, typename... node_types>
+        struct callback_arguments_helper<end, end, node_types...> {
+            static void help(const clang::ast_matchers::MatchFinder::MatchResult&,
+                             std::tuple<match_id<node_types>...>,
+                             std::tuple<std::add_pointer_t<std::add_const_t<node_types>>...>&) {}
+        };
+
+
         clang::ASTContext& m_context;
         clang::ast_matchers::MatchFinder m_match_finder;
         std::vector<std::unique_ptr<clang::ast_matchers::MatchFinder::MatchCallback>> m_match_callbacks;
@@ -64,10 +121,27 @@ public:
 
         match_finder_wrapper galena_types_match_finder(context);
 
-        auto galena_type_matcher = recordDecl(hasName("::galena::float4")).bind("galena_float4");
-        galena_types_match_finder.add_matcher<clang::RecordDecl>(galena_type_matcher, "galena_float4",
-                                                                 [this, &context](const clang::RecordDecl* decl) {
-            m_galena_float4_type = context.getRecordType(decl).getTypePtr()->getUnqualifiedDesugaredType();
+        auto galena_type_matcher =
+            cxxRecordDecl(eachOf(
+                cxxRecordDecl(hasName("::galena::float4")).bind("galena_float4"),
+                cxxRecordDecl(hasName("::galena::pixel_shader_position")).bind("galena_pixel_shader_position")
+            ));
+        galena_types_match_finder.add_multiple_matchers(galena_type_matcher,
+                                                        std::make_tuple(
+                                                            match_finder_wrapper::match_id<clang::CXXRecordDecl>("galena_float4"),
+                                                            match_finder_wrapper::match_id<clang::CXXRecordDecl>("galena_pixel_shader_position")
+                                                        ),
+                                                        [this, &context](const clang::RecordDecl* float4_decl,
+                                                                         const clang::RecordDecl* pixel_shader_position_decl) {
+            if(float4_decl) {
+                m_galena_float4_type = context.getRecordType(float4_decl)
+                                            .getTypePtr()->getUnqualifiedDesugaredType();
+            }
+
+            if(pixel_shader_position_decl) {
+                m_galena_pixel_shader_position_type = context.getRecordType(pixel_shader_position_decl)
+                                                        .getTypePtr()->getUnqualifiedDesugaredType();
+            }
         });
 
         galena_types_match_finder.match();
@@ -86,10 +160,12 @@ public:
 
         for(const auto& temp_func_param_str : function_parameter_str_set) {
             auto func_param_str = boost::algorithm::trim_copy(temp_func_param_str);
-            if(func_param_str == "galena::float4") {
-                if(!m_galena_float4_type) throw std::runtime_error("Unknown type.");
+            if(m_galena_float4_type && func_param_str == "galena::float4") {
                 clang::Qualifiers qualifiers;
                 function_parameters.emplace_back(clang::QualType(m_galena_float4_type, qualifiers.getAsOpaqueValue()).getCanonicalType());
+            }
+            else {
+                throw std::runtime_error("Unknown type.");
             }
         }
 
@@ -154,15 +230,38 @@ public:
 
                     auto ast_constructor_arg_0 = ast_construct_expr->getArg(0);
                     if(get_type_index_for_clang_type(ast_construct_expr->getType()) != function.get_return_type()
-                        || !clang::ImplicitCastExpr::classof(ast_constructor_arg_0)) {
+                        || ast_construct_expr->getNumArgs() != 1) {
                         throw std::runtime_error("Unsupported return value conversion.");
                     }
 
-                    auto ast_implicit_cast_expr = static_cast<const clang::ImplicitCastExpr*>(ast_constructor_arg_0);
+                    const clang::Expr* arg_0_expr = nullptr;
+
+                    if(clang::ImplicitCastExpr::classof(ast_constructor_arg_0)) {
+                        arg_0_expr = static_cast<const clang::ImplicitCastExpr*>(ast_constructor_arg_0)->getSubExpr();
+                    }
+                    else if(clang::MaterializeTemporaryExpr::classof(ast_constructor_arg_0)) {
+                        arg_0_expr = static_cast<const clang::MaterializeTemporaryExpr*>(ast_constructor_arg_0)->GetTemporaryExpr();
+                        if(clang::ImplicitCastExpr::classof(arg_0_expr)) {
+                            arg_0_expr = static_cast<const clang::ImplicitCastExpr*>(arg_0_expr)->getSubExpr();
+                            if(clang::CXXConstructExpr::classof(arg_0_expr)) {
+                                auto temp_constructor_expr = static_cast<const clang::CXXConstructExpr*>(arg_0_expr);
+                                if(temp_constructor_expr->getNumArgs() == 1) {
+                                    arg_0_expr = temp_constructor_expr->getArg(0);
+                                    if(clang::ImplicitCastExpr::classof(arg_0_expr)) {
+                                        arg_0_expr = static_cast<const clang::ImplicitCastExpr*>(arg_0_expr)->getSubExpr();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if(!arg_0_expr) {
+                        throw std::runtime_error("Unsupported return value conversion.");
+                    }
 
                     function.add_operation(
                         shader_model::return_operation(
-                            process_expression(ast_implicit_cast_expr->getSubExpr(), function)));
+                            process_expression(arg_0_expr, function)));
                 }
                 else {
                     throw std::runtime_error("Unsupported return expression.");
@@ -190,8 +289,12 @@ public:
 
 private:
     boost::typeindex::type_index get_type_index_for_clang_type(const clang::Type* clang_type) {
-        if(clang_type->getUnqualifiedDesugaredType() == m_galena_float4_type) {
+        clang_type = clang_type->getUnqualifiedDesugaredType();
+        if(clang_type == m_galena_float4_type) {
             return boost::typeindex::type_id<galena::float4>();
+        }
+        else if(clang_type == m_galena_pixel_shader_position_type) {
+            return boost::typeindex::type_id<galena::pixel_shader_position>();
         }
 
         throw std::runtime_error("Unrecognized type.");
@@ -206,6 +309,7 @@ private:
     shader_model::function& m_function;
 
     const clang::Type* m_galena_float4_type = nullptr;
+    const clang::Type* m_galena_pixel_shader_position_type = nullptr;
 };
 
 
