@@ -1,4 +1,4 @@
-#include "galena/shader/codegen/hlsl.h"
+#include "galena/shader_codegen/hlsl.h"
 
 #include "galena/shader/shader.h"
 

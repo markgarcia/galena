@@ -18,16 +18,11 @@ set(SRC_LIST
     src/renderer.cpp
     src/window_render_surface.cpp
 
-    include/galena/shader/codegen/hlsl.h
-    src/shader/codegen/hlsl.cpp
-
     include/galena/window.h
     include/galena/window/window_event.h
     src/window.cpp
 
-    include/galena/shader/shader.h
-    include/galena/shader/shader_model.h
-    src/shader/shader_model.cpp)
+    include/galena/shader/shader.h)
 
 if(WIN32)
     add_definitions(-DUNICODE)

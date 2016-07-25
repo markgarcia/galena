@@ -1,7 +1,7 @@
 #include "galena/renderer/dx11/dx11_renderer.h"
 
 #include "galena/renderer/dx11/dx11_window_render_surface.h"
-#include "galena/shader/codegen/hlsl.h"
+#include "galena/shader_codegen/hlsl.h"
 #include "galena/shader/shader.h"
 
 #include <d3dcompiler.h>

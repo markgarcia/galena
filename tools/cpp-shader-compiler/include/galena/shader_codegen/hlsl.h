@@ -1,6 +1,6 @@
 #pragma once
 
-#include "galena/shader/shader_model.h"
+#include "galena/shader_model.h"
 
 #include <boost/type_index.hpp>
 #include <sstream>
@@ -10,7 +10,7 @@ namespace galena {
 namespace shader_codegen {
 
 
-class hlsl_builder {
+class BOOST_SYMBOL_EXPORT hlsl_builder {
 public:
     void build_function(const shader_model::function& function, std::stringstream& hlsl);
     void build_parameter_list(const std::vector<shader_model::function_parameter>& parameters,

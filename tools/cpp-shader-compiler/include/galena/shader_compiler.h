@@ -1,6 +1,6 @@
 #pragma once
 
-#include "galena/shader/shader_model.h"
+#include "galena/shader_model.h"
 
 #include <boost/filesystem.hpp>
 

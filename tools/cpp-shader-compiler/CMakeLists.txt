@@ -6,10 +6,14 @@ find_package(Clang REQUIRED)
 
 set(SRC_LIST
 
+    include/galena/shader_model.h
     include/galena/shader_compiler.h
     include/galena/source_location.h
+    include/galena/shader_codegen/hlsl.h
+    src/shader_model.cpp
     src/shader_compiler.cpp
-    src/source_location.cpp)
+    src/source_location.cpp
+    src/shader_codegen/hlsl.cpp)
 
 include_directories(include
                     ${LLVM_INCLUDE_DIRS})
