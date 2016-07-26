@@ -26,6 +26,9 @@ public:
     void set_vertex_shader(impl::compiled_vertex_shader* shader) override;
     void set_vertex_shader_state(std::vector<impl::input_buffer> input_buffers) override;
 
+    std::unique_ptr<impl::compiled_pixel_shader> compile_pixel_shader(const shader_model::function&) override;
+    void set_pixel_shader(impl::compiled_pixel_shader* shader) override;
+
 private:
     ComPtr<ID3D11Device> m_device;
     ComPtr<ID3D11DeviceContext> m_immediate_context;

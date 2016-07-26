@@ -158,11 +158,16 @@ public:
 
         std::vector<clang::QualType> function_parameters;
 
+        std::map<std::string, const clang::Type*> types = {
+            { "galena::float4", m_galena_float4_type },
+            { "galena::pixel_shader_position", m_galena_pixel_shader_position_type }
+        };
+
         for(const auto& temp_func_param_str : function_parameter_str_set) {
-            auto func_param_str = boost::algorithm::trim_copy(temp_func_param_str);
-            if(m_galena_float4_type && func_param_str == "galena::float4") {
+            auto iter = types.find(boost::algorithm::trim_copy(temp_func_param_str));
+            if(iter != types.end() && iter->second) {
                 clang::Qualifiers qualifiers;
-                function_parameters.emplace_back(clang::QualType(m_galena_float4_type, qualifiers.getAsOpaqueValue()).getCanonicalType());
+                function_parameters.emplace_back(clang::QualType(iter->second, qualifiers.getAsOpaqueValue()).getCanonicalType());
             }
             else {
                 throw std::runtime_error("Unknown type.");
@@ -211,57 +216,63 @@ public:
             });
         }
 
-        auto body = ast_func->getBody();
-        if(body->getStmtClass() != clang::Stmt::StmtClass::CompoundStmtClass) {
+        if(auto compound_stmt = llvm::dyn_cast<clang::CompoundStmt>(ast_func->getBody())) {
+            process_function_body(compound_stmt, function);
+        }
+        else {
             throw new std::runtime_error("Unsupported function body type.");
         }
-
-        process_function_body(static_cast<const clang::CompoundStmt*>(body), function);
     }
 
     void process_function_body(const clang::CompoundStmt* ast_body, shader_model::function& function) {
         for(const auto stmt : ast_body->body()) {
-            if(clang::ReturnStmt::classof(stmt)) {
-                auto ast_return_stmt = static_cast<const clang::ReturnStmt*>(stmt);
-                auto ast_return_value = ast_return_stmt->getRetValue();
-
-                if(clang::CXXConstructExpr::classof(ast_return_value)) {
-                    auto ast_construct_expr = static_cast<const clang::CXXConstructExpr*>(ast_return_value);
-
+            if(auto ast_return_stmt = llvm::dyn_cast<clang::ReturnStmt>(stmt)) {
+                auto ast_return_stmt_value = ast_return_stmt->getRetValue();
+                if(auto ast_construct_expr = llvm::dyn_cast<clang::CXXConstructExpr>(ast_return_stmt_value)) {
                     auto ast_constructor_arg_0 = ast_construct_expr->getArg(0);
                     if(get_type_index_for_clang_type(ast_construct_expr->getType()) != function.get_return_type()
                         || ast_construct_expr->getNumArgs() != 1) {
                         throw std::runtime_error("Unsupported return value conversion.");
                     }
 
-                    const clang::Expr* arg_0_expr = nullptr;
+                    const clang::Expr* ast_return_expr = nullptr;
 
-                    if(clang::ImplicitCastExpr::classof(ast_constructor_arg_0)) {
-                        arg_0_expr = static_cast<const clang::ImplicitCastExpr*>(ast_constructor_arg_0)->getSubExpr();
+                    if(auto ast_implicit_cast_expr = llvm::dyn_cast<clang::ImplicitCastExpr>(ast_constructor_arg_0)) {
+                        if(get_type_index_for_clang_type(ast_implicit_cast_expr->getSubExpr()->getType()) == function.get_return_type()) {
+                            ast_return_expr = ast_implicit_cast_expr->getSubExpr();
+                        }
                     }
                     else if(clang::MaterializeTemporaryExpr::classof(ast_constructor_arg_0)) {
-                        arg_0_expr = static_cast<const clang::MaterializeTemporaryExpr*>(ast_constructor_arg_0)->GetTemporaryExpr();
-                        if(clang::ImplicitCastExpr::classof(arg_0_expr)) {
-                            arg_0_expr = static_cast<const clang::ImplicitCastExpr*>(arg_0_expr)->getSubExpr();
-                            if(clang::CXXConstructExpr::classof(arg_0_expr)) {
-                                auto temp_constructor_expr = static_cast<const clang::CXXConstructExpr*>(arg_0_expr);
-                                if(temp_constructor_expr->getNumArgs() == 1) {
-                                    arg_0_expr = temp_constructor_expr->getArg(0);
-                                    if(clang::ImplicitCastExpr::classof(arg_0_expr)) {
-                                        arg_0_expr = static_cast<const clang::ImplicitCastExpr*>(arg_0_expr)->getSubExpr();
+                        auto ast_temporary_expr = static_cast<const clang::MaterializeTemporaryExpr*>(ast_constructor_arg_0)->GetTemporaryExpr();
+                        if(clang::ImplicitCastExpr::classof(ast_temporary_expr)) {
+                            auto ast_sub_expr = static_cast<const clang::ImplicitCastExpr*>(ast_temporary_expr)->getSubExpr();
+                            if(auto ast_temp_constructor_expr = llvm::dyn_cast<clang::CXXConstructExpr>(ast_sub_expr)) {
+                                if(get_type_index_for_clang_type(ast_temp_constructor_expr->getType()) == function.get_return_type()) {
+                                    if(ast_temp_constructor_expr->getNumArgs() == 1) {
+                                        if(auto ast_temp_implicit_cast = llvm::dyn_cast<clang::ImplicitCastExpr>(ast_temp_constructor_expr->getArg(0))) {
+                                            ast_return_expr = ast_temp_implicit_cast->getSubExpr();
+                                        }
                                     }
                                 }
                             }
                         }
                     }
 
-                    if(!arg_0_expr) {
+                    if(!ast_return_expr) {
                         throw std::runtime_error("Unsupported return value conversion.");
                     }
 
                     function.add_operation(
                         shader_model::return_operation(
-                            process_expression(arg_0_expr, function)));
+                            process_expression(ast_return_expr, function)));
+                }
+                else if(auto ast_init_list = llvm::dyn_cast<clang::InitListExpr>(ast_return_stmt_value)) {
+                    shader_model::variable_construct_expression construct_expr(function.get_return_type());
+                    for(auto ast_argument : *ast_init_list) {
+                        construct_expr.add_argument(process_expression(static_cast<const clang::Expr*>(ast_argument), function));
+                    }
+
+                    function.add_operation(shader_model::return_operation(construct_expr));
                 }
                 else {
                     throw std::runtime_error("Unsupported return expression.");
@@ -274,13 +285,15 @@ public:
     }
 
     shader_model::expression process_expression(const clang::Expr* ast_expr, const shader_model::function& function) {
-        if(clang::DeclRefExpr::classof(ast_expr)) {
-            auto ast_decl_ref_expr = static_cast<const clang::DeclRefExpr*>(ast_expr);
-            auto referred_decl = ast_decl_ref_expr->getDecl();
-            if(clang::ParmVarDecl::classof(referred_decl)) {
-                auto ast_param_var_decl = static_cast<const clang::ParmVarDecl*>(referred_decl);
+        if(auto ast_decl_ref_expr = llvm::dyn_cast<clang::DeclRefExpr>(ast_expr)) {
+            if(auto ast_param_var_decl = llvm::dyn_cast<clang::ParmVarDecl>(ast_decl_ref_expr->getDecl())) {
                 return shader_model::variable_reference_expression(
                             function.get_parameters()[ast_param_var_decl->getFunctionScopeIndex()]);
+            }
+        }
+        else if(auto ast_floating_literal = llvm::dyn_cast<clang::FloatingLiteral>(ast_expr)) {
+            if(&ast_floating_literal->getSemantics() == &llvm::APFloat::IEEEsingle) {
+                return shader_model::literal_value_expression(ast_floating_literal->getValue().convertToFloat());
             }
         }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/any.hpp>
 #include <boost/variant.hpp>
 #include <boost/type_index.hpp>
 #include <string>
@@ -37,8 +38,38 @@ public:
 using variable = boost::variant<function_parameter>;
 
 
+class literal_value_expression;
 class variable_reference_expression;
-using expression = boost::variant<variable_reference_expression>;
+class variable_construct_expression;
+using expression = boost::variant<literal_value_expression,
+                                  variable_reference_expression,
+                                  boost::recursive_wrapper<variable_construct_expression>>;
+
+
+class literal_value_expression {
+public:
+    template<typename type>
+    literal_value_expression(type&& value) {
+        set_value(std::forward<type>(value));
+    }
+
+    boost::typeindex::type_index get_type() const { return m_type; }
+
+    template<typename type>
+    void set_value(type&& value) {
+        m_type = boost::typeindex::type_id<type>();
+        m_value = std::forward<type>(value);
+    }
+
+    template<typename type>
+    type get_value() const {
+        return boost::any_cast<type>(m_value);
+    }
+
+private:
+    boost::any m_value;
+    boost::typeindex::type_index m_type;
+};
 
 
 class variable_reference_expression {
@@ -49,6 +80,25 @@ public:
 
 private:
     variable m_var;
+};
+
+
+class variable_construct_expression {
+public:
+    variable_construct_expression() = default;
+
+    variable_construct_expression(boost::typeindex::type_index type)
+        : m_type(type) {}
+
+    void set_type(boost::typeindex::type_index type) { m_type = type; }
+    boost::typeindex::type_index get_type() const { return m_type; }
+
+    void add_argument(expression expr) { m_arguments.emplace_back(std::move(expr)); }
+    const std::vector<expression>& get_arguments() const { return m_arguments; }
+
+private:
+    boost::typeindex::type_index m_type;
+    std::vector<expression> m_arguments;
 };
 
 

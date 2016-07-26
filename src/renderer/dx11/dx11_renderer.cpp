@@ -36,9 +36,32 @@ void dx11_renderer::render_on(window_render_surface& surface) {
 }
 
 
-class dx11_compiled_shader : public impl::compiled_vertex_shader {
+using shader_type = shader_codegen::hlsl_builder::shader_type;
+
+
+void compile_shader(shader_type type, const shader_model::function& function,
+                    ComPtr<ID3DBlob>& shader_blob) {
+    std::stringstream hlsl;
+    shader_codegen::hlsl_builder().build_function(function, type, hlsl);
+    auto hlsl_code_str = hlsl.str();
+
+    ComPtr<ID3DBlob> errors;
+    if(FAILED(D3DCompile(hlsl_code_str.c_str(), hlsl_code_str.size(), (function.get_name() + ".hlsl").c_str(),
+              nullptr, nullptr, function.get_name().c_str(),
+              type == shader_type::vertex ? "vs_5_0"
+                : type == shader_type::pixel ? "ps_5_0"
+                : "",
+              D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL0 | D3DCOMPILE_WARNINGS_ARE_ERRORS,
+              0,
+              &shader_blob, &errors))) {
+        throw std::runtime_error("Failed to compile shader.");
+    }
+}
+
+
+class dx11_compiled_vertex_shader : public impl::compiled_vertex_shader {
 public:
-    ~dx11_compiled_shader() {}
+    ~dx11_compiled_vertex_shader() {}
 
     ComPtr<ID3D11VertexShader> shader;
     ComPtr<ID3D11InputLayout> input_layout;
@@ -46,21 +69,10 @@ public:
 
 
 std::unique_ptr<impl::compiled_vertex_shader> dx11_renderer::compile_vertex_shader(const shader_model::function& function) {
-    std::stringstream hlsl;
-    shader_codegen::hlsl_builder().build_function(function, hlsl);
-    auto hlsl_code_str = hlsl.str();
-
-    auto compiled_shader = std::make_unique<dx11_compiled_shader>();
-
     ComPtr<ID3DBlob> shader_blob;
-    ComPtr<ID3DBlob> errors;
-    if(FAILED(D3DCompile(hlsl_code_str.c_str(), hlsl_code_str.size(), (function.get_name() + ".hlsl").c_str(),
-              nullptr, nullptr, function.get_name().c_str(), "vs_5_0",
-              D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL0 | D3DCOMPILE_WARNINGS_ARE_ERRORS,
-              0,
-              &shader_blob, &errors))) {
-        throw std::runtime_error("Failed to compile shader.");
-    }
+    compile_shader(shader_type::vertex, function, shader_blob);
+
+    auto compiled_shader = std::make_unique<dx11_compiled_vertex_shader>();
 
     if(FAILED(m_device->CreateVertexShader(shader_blob->GetBufferPointer(), shader_blob->GetBufferSize(),
                                            nullptr, &compiled_shader->shader))) {
@@ -80,7 +92,7 @@ std::unique_ptr<impl::compiled_vertex_shader> dx11_renderer::compile_vertex_shad
         }
 
         D3D11_INPUT_ELEMENT_DESC input_desc;
-        input_desc.SemanticName = "POSITION";
+        input_desc.SemanticName = shader_codegen::hlsl_builder::get_shader_type_semantic(parameter.get_type());
         input_desc.SemanticIndex = static_cast<UINT>(input_layout_desc.size());
         input_desc.Format = format;
         input_desc.InputSlot = static_cast<UINT>(input_layout_desc.size());
@@ -102,8 +114,36 @@ std::unique_ptr<impl::compiled_vertex_shader> dx11_renderer::compile_vertex_shad
 }
 
 
+class dx11_compiled_pixel_shader : public impl::compiled_pixel_shader {
+public:
+    ~dx11_compiled_pixel_shader() {}
+
+    ComPtr<ID3D11PixelShader> shader;
+};
+
+
+
+std::unique_ptr<impl::compiled_pixel_shader> dx11_renderer::compile_pixel_shader(const shader_model::function& function) {
+    ComPtr<ID3DBlob> shader_blob;
+    compile_shader(shader_type::pixel, function, shader_blob);
+
+    auto compiled_shader = std::make_unique<dx11_compiled_pixel_shader>();
+    if(FAILED(m_device->CreatePixelShader(shader_blob->GetBufferPointer(), shader_blob->GetBufferSize(),
+                                          nullptr, &compiled_shader->shader))) {
+        throw std::runtime_error("Failed to create device shader.");
+    }
+
+    return std::move(compiled_shader);
+}
+
+
+void dx11_renderer::set_pixel_shader(impl::compiled_pixel_shader* shader) {
+    m_immediate_context->PSSetShader(static_cast<dx11_compiled_pixel_shader*>(shader)->shader.Get(), nullptr, 0);
+}
+
+
 void dx11_renderer::set_vertex_shader(impl::compiled_vertex_shader* shader_) {
-    auto shader = static_cast<dx11_compiled_shader*>(shader_);
+    auto shader = static_cast<dx11_compiled_vertex_shader*>(shader_);
 
     m_immediate_context->IASetInputLayout(shader->input_layout.Get());
     m_immediate_context->VSSetShader(shader->shader.Get(), nullptr, 0);

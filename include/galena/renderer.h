@@ -22,6 +22,12 @@ public:
 };
 
 
+class compiled_pixel_shader {
+public:
+    virtual ~compiled_pixel_shader() = 0;
+};
+
+
 struct input_buffer {
     const void* data;
     std::size_t buffer_size;
@@ -34,9 +40,13 @@ public:
     virtual ~renderer_impl() = 0;
 
     virtual void render_on(window_render_surface& surface) = 0;
+
     virtual std::unique_ptr<compiled_vertex_shader> compile_vertex_shader(const shader_model::function&) = 0;
     virtual void set_vertex_shader(compiled_vertex_shader* shader) = 0;
     virtual void set_vertex_shader_state(std::vector<input_buffer> input_buffers) = 0;
+
+    virtual std::unique_ptr<compiled_pixel_shader> compile_pixel_shader(const shader_model::function&) = 0;
+    virtual void set_pixel_shader(compiled_pixel_shader* shader) = 0;
 };
 
 
@@ -93,9 +103,14 @@ public:
     template<typename... input_param_types>
     void set_vertex_shader_state(const vertex_shader_state<input_param_types...>& state) {
         std::vector<impl::input_buffer> input_buffers;
-        input_buffers.reserve(std::tuple_size<std::tuple<input_param_types...>>::value);
-        set_vertex_shader_state_helper<0, std::tuple_size<std::tuple<input_param_types...>>::value>::help(state, input_buffers);
+        input_buffers.reserve(sizeof...(input_param_types));
+        set_vertex_shader_state_helper<0, sizeof...(input_param_types)>::help(state, input_buffers);
         m_impl->set_vertex_shader_state(input_buffers);
+    }
+
+    template<typename return_type, typename... param_types>
+    void set_pixel_shader(return_type (*func)(param_types...)) {
+        set_pixel_shader(reinterpret_cast<uint64_t>(func));
     }
 
     impl::renderer_impl& get_impl() { return *m_impl; }
@@ -105,6 +120,7 @@ private:
     shader_compiler m_compiler;
 
     void set_vertex_shader(uint64_t func_address);
+    void set_pixel_shader(uint64_t func_address);
 
 
     template<unsigned int param_index, unsigned int end>

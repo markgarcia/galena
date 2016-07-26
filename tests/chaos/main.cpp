@@ -30,6 +30,8 @@ int main() {
         galena::float4 { -0.5f, -0.5f, 0.5f, 0.0f }
     });
 
+    renderer.set_pixel_shader(shaders::pixel_shader);
+
     while(application.is_open()) {
         application.process_events();
         window_render_surface.clear();
