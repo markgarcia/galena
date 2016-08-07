@@ -16,6 +16,9 @@ public:
 
     virtual void clear() = 0;
     virtual void present() = 0;
+
+    virtual unsigned int get_width() const = 0;
+    virtual unsigned int get_height() const = 0;
 };
 
 
@@ -28,6 +31,9 @@ public:
 
     void clear();
     void present();
+
+    unsigned int get_width() const;
+    unsigned int get_height() const;
 
     impl::window_render_surface_impl& get_impl() { return *m_impl; }
 

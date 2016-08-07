@@ -47,6 +47,8 @@ public:
 
     virtual std::unique_ptr<compiled_pixel_shader> compile_pixel_shader(const shader_model::function&) = 0;
     virtual void set_pixel_shader(compiled_pixel_shader* shader) = 0;
+
+    virtual void draw(unsigned int num_vertices) = 0;
 };
 
 
@@ -58,7 +60,7 @@ class vertex_shader_state {
 public:
     template<unsigned int param_index, template<typename type> class buffer_type>
     void set_input(const buffer_type<std::tuple_element_t<param_index, std::tuple<input_param_types...>>>& source_buffer) {
-        auto buffer = std::get<param_index>(m_buffers);
+        auto& buffer = std::get<param_index>(m_buffers);
         buffer.clear();
         buffer.resize(source_buffer.size());
         std::copy(source_buffer.begin(), source_buffer.end(), buffer.begin());
@@ -66,7 +68,7 @@ public:
 
     template<unsigned int param_index, std::size_t array_size>
     void set_input(const std::array<std::tuple_element_t<param_index, std::tuple<input_param_types...>>, array_size>& source_buffer) {
-        auto buffer = std::get<param_index>(m_buffers);
+        auto& buffer = std::get<param_index>(m_buffers);
         buffer.clear();
         buffer.resize(source_buffer.size());
         std::copy(source_buffer.begin(), source_buffer.end(), buffer.begin());
@@ -113,6 +115,10 @@ public:
         set_pixel_shader(reinterpret_cast<uint64_t>(func));
     }
 
+
+    void draw(unsigned int num_vertices);
+
+
     impl::renderer_impl& get_impl() { return *m_impl; }
 
 private:
@@ -129,9 +135,11 @@ private:
         static void help(const vertex_shader_state<input_param_types...>& state,
                          std::vector<impl::input_buffer>& input_buffers) {
             const auto& input = state.template get_input<param_index>();
-            input_buffers.emplace_back(input.data(),
-                                       sizeof(typename decltype(input)::value_type) * input.size(),
-                                       sizeof(typename decltype(input)::value_type));
+            input_buffers.push_back({
+                                       input.data(),
+                                       sizeof(typename std::decay<decltype(input)>::type::value_type) * input.size(),
+                                       sizeof(typename std::decay<decltype(input)>::type::value_type)
+                                    });
             set_vertex_shader_state_helper<param_index + 1, end>::help(state, input_buffers);
         }
     };

@@ -22,7 +22,11 @@ public:
     ~window();
 
     void set_event_processor(std::function<void(window_event&)> func);
-    impl_win32::window_impl* impl() const;
+
+    unsigned int get_width() const;
+    unsigned int get_height() const;
+
+    impl_win32::window_impl& impl() const;
 
 private:
     std::unique_ptr<impl_win32::window_impl> window_impl;

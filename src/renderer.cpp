@@ -50,4 +50,9 @@ void renderer::set_pixel_shader(uint64_t func_address) {
 }
 
 
+void renderer::draw(unsigned int num_vertices) {
+    m_impl->draw(num_vertices);
+}
+
+
 }

@@ -35,9 +35,11 @@ window_impl::window_impl(int width, int height, const std::string& title) {
         if(!RegisterClassEx(&window_class)) throw std::runtime_error("Unable to create window class.");
     }
 
+    RECT rect = { 0, 0, width, height };
+    AdjustWindowRect( &rect, WS_OVERLAPPEDWINDOW, FALSE );
     hwnd = CreateWindowEx(0, window_class.lpszClassName, ws_title.c_str(),
                             WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
-                            width, height,
+                            rect.right - rect.left, rect.bottom - rect.top,
                             NULL, NULL, hinstance,
                             reinterpret_cast<void*>(this));
     if(!hwnd) throw std::runtime_error("Unable to create window.");
@@ -48,9 +50,25 @@ window_impl::~window_impl() {
     if(hwnd) DestroyWindow(hwnd);
 }
 
+
 void window_impl::set_event_processor(std::function<void(window_event&)> func) {
     event_processor = std::move(func);
 }
+
+
+unsigned int window_impl::get_width() const {
+    RECT rect;
+    GetClientRect(hwnd, &rect);
+    return rect.right - rect.left;
+}
+
+
+unsigned int window_impl::get_height() const {
+    RECT rect;
+    GetClientRect(hwnd, &rect);
+    return rect.bottom - rect.top;
+}
+
 
 window_event::result window_impl::process_event(msg_type msg, wparam_type wparam, lparam_type lparam) {
     if(!event_processor) return window_event::result::none;
@@ -60,6 +78,7 @@ window_event::result window_impl::process_event(msg_type msg, wparam_type wparam
 
     return event.result_value;
 }
+
 
 LRESULT CALLBACK window_impl::wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
     auto window = reinterpret_cast<window_impl*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));

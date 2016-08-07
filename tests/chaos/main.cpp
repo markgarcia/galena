@@ -25,16 +25,21 @@ int main() {
 
     auto vs_state = renderer.set_vertex_shader(shaders::vertex_shader);
     vs_state.set_input<0>(std::array<galena::float4, 3> {
-        galena::float4 { 0.0f, 0.5f, 0.5f, 0.0f },
-        galena::float4 { 0.5f, -0.5f, 0.5f, 0.0f },
-        galena::float4 { -0.5f, -0.5f, 0.5f, 0.0f }
+        galena::float4 { 0.0f, 0.5f, 0.5f, 1.0f },
+        galena::float4 { 0.5f, -0.5f, 0.5f, 1.0f },
+        galena::float4 { -0.5f, -0.5f, 0.5f, 1.0f }
     });
+
+    renderer.set_vertex_shader_state(vs_state);
 
     renderer.set_pixel_shader(shaders::pixel_shader);
 
     while(application.is_open()) {
         application.process_events();
         window_render_surface.clear();
+
+        renderer.draw(3);
+
         window_render_surface.present();
     }
 }

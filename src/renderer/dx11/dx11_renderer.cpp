@@ -12,7 +12,15 @@ namespace galena {
 
 
 dx11_renderer::dx11_renderer() {
-    if(FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0,
+    D3D_FEATURE_LEVEL feature_levels[] =
+    {
+        D3D_FEATURE_LEVEL_11_1,
+        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0,
+    };
+
+    if(FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_DEBUG, feature_levels, 4,
                                 D3D11_SDK_VERSION, &m_device, nullptr, &m_immediate_context)))
     {
         throw std::runtime_error("Cannot create D3D11 device.");
@@ -29,10 +37,17 @@ ComPtr<ID3D11Device> dx11_renderer::get_device() {
 
 
 void dx11_renderer::render_on(window_render_surface& surface) {
-    m_immediate_context->OMSetRenderTargets(1,
-                                            &static_cast<dx11_window_render_surface&>(surface.get_impl())
-                                                .get_render_target(),
-                                            nullptr);
+    auto render_target = static_cast<dx11_window_render_surface&>(surface.get_impl()).get_render_target();
+    m_immediate_context->OMSetRenderTargets(1, render_target.GetAddressOf(), nullptr);
+
+    D3D11_VIEWPORT viewport;
+    viewport.Width = static_cast<float>(surface.get_width());
+    viewport.Height = static_cast<float>(surface.get_height());
+    viewport.MinDepth = 0.0f;
+    viewport.MaxDepth = 1.0f;
+    viewport.TopLeftX = 0;
+    viewport.TopLeftY = 0;
+    m_immediate_context->RSSetViewports(1, &viewport);
 }
 
 
@@ -51,7 +66,7 @@ void compile_shader(shader_type type, const shader_model::function& function,
               type == shader_type::vertex ? "vs_5_0"
                 : type == shader_type::pixel ? "ps_5_0"
                 : "",
-              D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL0 | D3DCOMPILE_WARNINGS_ARE_ERRORS,
+              D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION | D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_WARNINGS_ARE_ERRORS,
               0,
               &shader_blob, &errors))) {
         throw std::runtime_error("Failed to compile shader.");
@@ -183,6 +198,13 @@ void dx11_renderer::set_vertex_shader_state(std::vector<impl::input_buffer> inpu
 
     m_immediate_context->IASetVertexBuffers(0, buffers_input.size(), buffers_input.data(),
                                             strides.data(), offsets.data());
+
+    m_immediate_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+}
+
+
+void dx11_renderer::draw(unsigned int num_vertices) {
+    m_immediate_context->Draw(num_vertices, 0);
 }
 
 

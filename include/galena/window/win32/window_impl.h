@@ -30,6 +30,9 @@ public:
 
     void set_event_processor(std::function<void(window_event&)> func);
 
+    unsigned int get_width() const;
+    unsigned int get_height() const;
+
     window_event::result process_event(msg_type msg, wparam_type wparam, lparam_type lparam);
     static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
 

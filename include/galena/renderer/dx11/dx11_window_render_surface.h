@@ -20,12 +20,18 @@ public:
     void clear() override;
     void present() override;
 
+    unsigned int get_width() const override;
+    unsigned int get_height() const override;
+
     ComPtr<ID3D11RenderTargetView> get_render_target();
 
 private:
     ComPtr<ID3D11Device> m_device;
     ComPtr<IDXGISwapChain> m_swap_chain;
     ComPtr<ID3D11RenderTargetView> m_render_target;
+
+    unsigned int m_width = 0;
+    unsigned int m_height = 0;
 };
 
 
